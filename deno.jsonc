@@ -1,8 +1,8 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-net --reload main.ts"
+    "dev": "deno run --watch --allow-net --allow-read --reload main.ts"
   },
   "imports": {
-    "openai": "npm:openai@3.2.1"
+    "dotenv": "https://deno.land/x/dotenv@v3.2.2/mod.ts"
   }
 }
