@@ -1,4 +1,13 @@
-import { initStreamingChat } from "./chat.ts";
+import { initStreamingChat, StreamChunk } from "./chat.ts";
+
+const textEncoder = new TextEncoder();
+
+function onChunk(chunk: StreamChunk) {
+  const chunkMessage = chunk?.choices[0].delta.content || "";
+  if (chunk && chunkMessage && chunkMessage.length) {
+    Deno.stdout.write(textEncoder.encode(chunkMessage));
+  }
+}
 
 async function main() {
   const streamingChat = initStreamingChat({
@@ -11,28 +20,19 @@ async function main() {
       },
     ],
   });
-  const textEncoder = new TextEncoder();
 
-  // TODO: Figure out why start of stream text is being cut off sometimes
   while (true) {
     try {
-      const input = prompt(">") ?? "";
+      const input = prompt("Prompt:") ?? "";
       if (input === "exit" || input === "quit" || input === "q") {
         break;
       }
 
-      const streamedChat = await streamingChat(input).next();
-      while (true) {
-        const chunk = await streamedChat.value.chunkStream().next();
-        if (chunk.done) {
-          break;
-        }
-        Deno.stdout.write(textEncoder.encode(chunk.value));
-      }
-      console.log();
+      const streamedChat = await streamingChat(input, onChunk).next();
+      // console.log({ msg: streamedChat.value.message });
     } catch (e) {
       console.error(e);
-      break;
+      continue;
     }
   }
 }

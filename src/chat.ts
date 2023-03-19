@@ -1,11 +1,11 @@
 import { config } from "dotenv";
 
+const textDecoder = new TextDecoder();
+
 const chatUrl = "https://api.openai.com/v1/chat/completions";
 
 const openAIAPIKey = config().OPENAI_API_KEY || Deno.env.get("OPENAI_API_KEY");
 const openAIAOrgID = config().OPENAI_ORG_ID || Deno.env.get("OPENAI_ORG_ID");
-
-const decoder = new TextDecoder();
 
 const chatReqHeaders = {
   "Content-Type": "application/json",
@@ -73,7 +73,7 @@ interface StreamChunkChoice {
   index: number;
 }
 
-interface StreamChunk {
+export interface StreamChunk {
   id: string;
   object: "chat.completion.chunk";
   created: number;
@@ -122,59 +122,30 @@ function getChatIterator(args: GetChatIteratorArgs) {
   };
 }
 
-function parseRawChunk(dataValue: Uint8Array): StreamChunk | undefined {
-  const chunkDataString = decoder.decode(
-    dataValue || new Uint8Array(),
-    {
-      stream: true,
-    },
-  );
+function parseStreamDataEvents(dataValue: Uint8Array) {
+  const chunkDataString = textDecoder.decode(dataValue, { stream: true });
+  const dataEvents = chunkDataString.split("\n\n").filter((e) => e && e.length);
 
-  if (
-    !chunkDataString || !chunkDataString.length ||
-    chunkDataString.match(/^\[DONE\]/)
-  ) {
-    return undefined;
+  const streamChunks = [];
+  for (const eventString of dataEvents) {
+    if (eventString.match(/\[DONE\]/g)) {
+      break;
+    }
+    const jsonString = eventString.match(/^data:\s+(.*)/)![1];
+    const parsedChunk = JSON.parse(jsonString) as StreamChunk;
+    streamChunks.push(parsedChunk);
   }
 
-  const jsonString = chunkDataString.match(/^data:\s+(.*)/)![1];
-  const chunk = jsonString ? JSON.parse(jsonString) : undefined;
-  return chunk;
-}
-
-interface GetChunkStreamIteratorArgs {
-  reader: ReadableStreamDefaultReader<Uint8Array>;
-  appendMessage: (value: string) => void;
-}
-
-function getChunkStreamIterator(args: GetChunkStreamIteratorArgs) {
-  const { appendMessage, reader } = args;
-  return async function* chunkStream() {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) {
-        break;
-      }
-
-      const chunk = parseRawChunk(value);
-      if (!chunk) {
-        break;
-      }
-
-      const chunkMessage = chunk?.choices[0].delta.content || "";
-      if (chunk) {
-        appendMessage(chunkMessage);
-      }
-
-      yield chunkMessage;
-    }
-  };
+  return streamChunks;
 }
 
 function getStreamingChatIterator(args: GetChatIteratorArgs) {
   const { messages, model, temperature, stop } = args;
 
-  return async function* streamedChat(prompt: string) {
+  return async function* streamedChat(
+    prompt: string,
+    onChunk: (chunk: StreamChunk) => void,
+  ) {
     while (true) {
       messages.push({ role: "user", content: prompt });
 
@@ -194,18 +165,32 @@ function getStreamingChatIterator(args: GetChatIteratorArgs) {
 
       const reader = rawChatResponse.body!.getReader();
       let partialData = "";
-      const chunkStream = getChunkStreamIterator({
-        reader,
-        appendMessage: (value: string) => {
-          partialData += value.trim();
-        },
-      });
-      messages.push({ role: "assistant", content: partialData });
 
-      yield {
-        chunkStream,
-        message: partialData,
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        const parsedChunks = parseStreamDataEvents(value);
+
+        for (const chunk of parsedChunks) {
+          const chunkMessage = chunk?.choices[0].delta.content;
+          if (chunkMessage && chunkMessage.length) {
+            partialData += chunkMessage;
+          }
+          onChunk(chunk);
+        }
+      }
+
+      const gatheredMessage = {
+        role: "assistant" as MessageRoles,
+        content: partialData,
       };
+
+      messages.push(gatheredMessage);
+
+      yield { message: gatheredMessage };
     }
   };
 }
