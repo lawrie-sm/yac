@@ -1,15 +1,20 @@
 import { config } from "dotenv";
 
-type OpenAIModels = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
+type Models = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
 
-type OpenAIRoles = "system" | "user" | "assistant";
+type FinishReasons = "stop" | "length" | "content_filter" | "null";
 
-type OpenAIFinishReasons = "stop" | "length" | "content_filter" | "null";
+type MessageRoles = "system" | "user" | "assistant";
 
-interface ChatRequestBody {
-  model: OpenAIModels;
+interface Message {
+  role: MessageRoles;
+  content: string;
+}
+
+interface ChatReqBody {
+  model: Models;
   messages: {
-    role: OpenAIRoles;
+    role: MessageRoles;
     content: string;
   }[];
   temperature?: number; // How much to randomize the choices (use this or top_p)
@@ -25,11 +30,11 @@ interface ChatRequestBody {
 }
 
 // TODO: Probably want to handle error bodies too
-interface ChatResponseBody {
+interface ChatResBody {
   id: string;
   object: "chat.completion";
   created: number;
-  model: OpenAIModels;
+  model: Models;
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -37,45 +42,78 @@ interface ChatResponseBody {
   };
   choices: {
     message: {
-      role: OpenAIRoles;
+      role: MessageRoles;
       content: string;
     };
-    finish_reason: OpenAIFinishReasons;
+    finish_reason: FinishReasons;
     index: number;
   }[];
 }
 
-const main = async () => {
-  const openAIAPIKey = config().OPENAI_API_KEY;
+interface GetChatArgs {
+  model: Models;
+  initialMessages: Message[];
+  temperature: number;
+}
 
+function getChat(args: GetChatArgs) {
+  const { model, initialMessages, temperature } = args;
+
+  const openAIAPIKey = config().OPENAI_API_KEY;
+  const openAIAOrgID = config().OPENAI_ORG_ID;
   const chatCompletionUrl = "https://api.openai.com/v1/chat/completions";
-  const model = "gpt-4";
-  const temperature = 0.3;
-  const systemMessage = "Obey the users commands";
 
   const openAIHeaders = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${openAIAPIKey}`,
+    "OpenAI-Organization": `${openAIAOrgID}`,
   };
 
-  const openAIBody: ChatRequestBody = {
-    model,
-    messages: [
-      { role: "system", content: systemMessage },
-      { role: "user", content: "hello" },
+  const messages: Message[] = [...initialMessages];
+
+  async function* chat(prompt: string): AsyncIterator<ChatResBody> {
+    while (true) {
+      messages.push({ role: "user", content: prompt });
+
+      const openAIBody: ChatReqBody = {
+        model,
+        messages,
+        temperature,
+      };
+
+      const rawResponse = await fetch(chatCompletionUrl, {
+        method: "POST",
+        headers: openAIHeaders,
+        body: JSON.stringify(openAIBody),
+      });
+
+      const content: ChatResBody = await rawResponse.json();
+
+      const assistantMessage = content.choices[0].message;
+      messages.push(assistantMessage);
+
+      yield content;
+    }
+  }
+  return chat;
+}
+
+async function main() {
+  const chat = getChat({
+    model: "gpt-3.5-turbo",
+    initialMessages: [
+      {
+        role: "system",
+        content: "Repeat the text supplied by the user exactly",
+      },
     ],
-    temperature,
-  };
-
-  const rawResponse = await fetch(chatCompletionUrl, {
-    method: "POST",
-    headers: openAIHeaders,
-    body: JSON.stringify(openAIBody),
+    temperature: 0.5,
   });
-  console.log(rawResponse);
-  const content: ChatResponseBody = await rawResponse.json();
-  console.log(content);
-};
+  const hello = await chat("Hello").next();
+  console.dir(hello.value);
+  const world = await chat("W0rld").next();
+  console.dir(world.value);
+}
 
 if (import.meta.main) {
   main();
