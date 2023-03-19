@@ -1,26 +1,35 @@
-import { getChat } from "./chat.ts";
+import { initStreamingChat } from "./chat.ts";
 
 async function main() {
-  const chat = getChat({
+  const streamingChat = initStreamingChat({
     model: "gpt-3.5-turbo",
+    temperature: 0.5,
     initialMessages: [
       {
         role: "system",
-        content: "Repeat the text supplied by the user exactly",
+        content: "You are a helpful chat assistant",
       },
     ],
-    stream: true,
-    temperature: 0.5,
   });
+  const textEncoder = new TextEncoder();
 
+  // TODO: Figure out why start of stream text is being cut off sometimes
   while (true) {
     try {
       const input = prompt(">") ?? "";
       if (input === "exit" || input === "quit" || input === "q") {
         break;
       }
-      const response = await chat(input).next();
-      console.log(response.value.message);
+
+      const streamedChat = await streamingChat(input).next();
+      while (true) {
+        const chunk = await streamedChat.value.chunkStream().next();
+        if (chunk.done) {
+          break;
+        }
+        Deno.stdout.write(textEncoder.encode(chunk.value));
+      }
+      console.log();
     } catch (e) {
       console.error(e);
       break;

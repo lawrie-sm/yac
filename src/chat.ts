@@ -1,10 +1,11 @@
 import { config } from "dotenv";
-import { readerFromStreamReader } from "https://deno.land/std/streams/mod.ts";
 
 const chatUrl = "https://api.openai.com/v1/chat/completions";
 
 const openAIAPIKey = config().OPENAI_API_KEY || Deno.env.get("OPENAI_API_KEY");
 const openAIAOrgID = config().OPENAI_ORG_ID || Deno.env.get("OPENAI_ORG_ID");
+
+const decoder = new TextDecoder();
 
 const chatReqHeaders = {
   "Content-Type": "application/json",
@@ -63,7 +64,7 @@ interface ChatResBody {
   choices: ChatChoice[];
 }
 
-interface ChatChunkChoice {
+interface StreamChunkChoice {
   delta: {
     role?: MessageRoles;
     content?: string;
@@ -72,19 +73,18 @@ interface ChatChunkChoice {
   index: number;
 }
 
-interface ChatStreamChunk {
+interface StreamChunk {
   id: string;
   object: "chat.completion.chunk";
   created: number;
   model: Models;
-  choices: ChatChunkChoice[];
+  choices: StreamChunkChoice[];
 }
 
 interface GetChatArgs {
   model: Models;
   initialMessages: Message[];
   temperature: number;
-  stream?: boolean;
   stop?: string[];
 }
 
@@ -92,16 +92,10 @@ interface GetChatIteratorArgs extends Omit<GetChatArgs, "initialMessages"> {
   messages: Message[];
 }
 
-interface ChatRetVal {
-  resBody?: ChatResBody;
-  streamChunk?: ChatStreamChunkData;
-  message: string;
-}
-
 function getChatIterator(args: GetChatIteratorArgs) {
-  const { messages, model, temperature, stream, stop } = args;
+  const { messages, model, temperature, stop } = args;
 
-  return async function* chat(prompt: string): AsyncGenerator<ChatRetVal> {
+  return async function* chat(prompt: string) {
     while (true) {
       messages.push({ role: "user", content: prompt });
 
@@ -109,7 +103,6 @@ function getChatIterator(args: GetChatIteratorArgs) {
         model,
         messages,
         temperature,
-        ...(stream && { stream }),
         ...(stop && { stop }),
       };
 
@@ -124,28 +117,64 @@ function getChatIterator(args: GetChatIteratorArgs) {
       const assistantMessage = content.choices[0].message;
       messages.push(assistantMessage);
 
-      yield { resBody: content, message: assistantMessage.content };
+      yield content;
     }
   };
 }
 
-function parseRawChunk(dataValue: Uint8Array): ChatStreamChunk | undefined {
-  const decoder = new TextDecoder();
+function parseRawChunk(dataValue: Uint8Array): StreamChunk | undefined {
   const chunkDataString = decoder.decode(
     dataValue || new Uint8Array(),
     {
       stream: true,
     },
   );
+
+  if (
+    !chunkDataString || !chunkDataString.length ||
+    chunkDataString.match(/^\[DONE\]/)
+  ) {
+    return undefined;
+  }
+
   const jsonString = chunkDataString.match(/^data:\s+(.*)/)![1];
   const chunk = jsonString ? JSON.parse(jsonString) : undefined;
   return chunk;
 }
 
-function getChatStreamIterator(args: GetChatIteratorArgs) {
-  const { messages, model, temperature, stream, stop } = args;
+interface GetChunkStreamIteratorArgs {
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  appendMessage: (value: string) => void;
+}
 
-  return async function* chat(prompt: string): AsyncGenerator<ChatRetVal> {
+function getChunkStreamIterator(args: GetChunkStreamIteratorArgs) {
+  const { appendMessage, reader } = args;
+  return async function* chunkStream() {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const chunk = parseRawChunk(value);
+      if (!chunk) {
+        break;
+      }
+
+      const chunkMessage = chunk?.choices[0].delta.content || "";
+      if (chunk) {
+        appendMessage(chunkMessage);
+      }
+
+      yield chunkMessage;
+    }
+  };
+}
+
+function getStreamingChatIterator(args: GetChatIteratorArgs) {
+  const { messages, model, temperature, stop } = args;
+
+  return async function* streamedChat(prompt: string) {
     while (true) {
       messages.push({ role: "user", content: prompt });
 
@@ -153,7 +182,7 @@ function getChatStreamIterator(args: GetChatIteratorArgs) {
         model,
         messages,
         temperature,
-        ...(stream && { stream }),
+        stream: true,
         ...(stop && { stop }),
       };
 
@@ -164,34 +193,33 @@ function getChatStreamIterator(args: GetChatIteratorArgs) {
       });
 
       const reader = rawChatResponse.body!.getReader();
-
       let partialData = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        const chunk = parseRawChunk(value);
-        if (chunk) {
-          partialData += chunk.choices[0].delta.content || "";
-        }
-      }
-
+      const chunkStream = getChunkStreamIterator({
+        reader,
+        appendMessage: (value: string) => {
+          partialData += value.trim();
+        },
+      });
       messages.push({ role: "assistant", content: partialData });
 
       yield {
+        chunkStream,
         message: partialData,
       };
     }
   };
 }
 
-export function getChat(args: GetChatArgs) {
-  const { model, initialMessages, temperature, stream, stop } = args;
+export function initChat(args: GetChatArgs) {
+  const { model, initialMessages, temperature, stop } = args;
   const messages: Message[] = [...initialMessages];
-  const getChatIteratorArgs = { model, messages, temperature, stream, stop };
-  return stream
-    ? getChatStreamIterator(getChatIteratorArgs)
-    : getChatIterator(getChatIteratorArgs);
+  const getChatIteratorArgs = { model, messages, temperature, stop };
+  return getChatIterator(getChatIteratorArgs);
+}
+
+export function initStreamingChat(args: GetChatArgs) {
+  const { model, initialMessages, temperature, stop } = args;
+  const messages: Message[] = [...initialMessages];
+  const getChatIteratorArgs = { model, messages, temperature, stop };
+  return getStreamingChatIterator(getChatIteratorArgs);
 }
