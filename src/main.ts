@@ -1,8 +1,10 @@
 import { initStreamingChat, StreamChunk } from "./chat.ts";
+import { isSpinnerRunning, startSpinner, stopSpinner } from "./spinner.ts";
 
 const textEncoder = new TextEncoder();
 
 function onChunk(chunk: StreamChunk) {
+  isSpinnerRunning && stopSpinner();
   const chunkMessage = chunk?.choices[0].delta.content || "";
   if (chunk && chunkMessage && chunkMessage.length) {
     Deno.stdout.write(textEncoder.encode(chunkMessage));
@@ -23,13 +25,18 @@ async function main() {
 
   while (true) {
     try {
-      const input = prompt("Prompt:") ?? "";
+      const input = prompt("Prompt:");
+      if (!input || input === "") {
+        continue;
+      }
+
       if (input === "exit" || input === "quit" || input === "q") {
         break;
       }
 
-      const streamedChat = await streamingChat(input, onChunk).next();
-      // console.log({ msg: streamedChat.value.message });
+      startSpinner();
+      await streamingChat(input, onChunk).next();
+      console.log();
     } catch (e) {
       console.error(e);
       continue;
