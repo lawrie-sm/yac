@@ -1,7 +1,16 @@
 import { config } from "dotenv";
+import { readerFromStreamReader } from "https://deno.land/std/streams/mod.ts";
+
+const chatUrl = "https://api.openai.com/v1/chat/completions";
 
 const openAIAPIKey = config().OPENAI_API_KEY || Deno.env.get("OPENAI_API_KEY");
 const openAIAOrgID = config().OPENAI_ORG_ID || Deno.env.get("OPENAI_ORG_ID");
+
+const chatReqHeaders = {
+  "Content-Type": "application/json",
+  "Authorization": `Bearer ${openAIAPIKey}`,
+  "OpenAI-Organization": `${openAIAOrgID}`,
+};
 
 type Models = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
 
@@ -32,7 +41,15 @@ interface ChatReqBody {
   user?: string; // The user ID to use for this chat completion
 }
 
-// TODO: Probably want to handle error bodies too
+interface ChatChoice {
+  message: {
+    role: MessageRoles;
+    content: string;
+  };
+  finish_reason: FinishReasons;
+  index: number;
+}
+
 interface ChatResBody {
   id: string;
   object: "chat.completion";
@@ -43,61 +60,138 @@ interface ChatResBody {
     completion_tokens: number;
     total_tokens: number;
   };
-  choices: {
-    message: {
-      role: MessageRoles;
-      content: string;
-    };
-    finish_reason: FinishReasons;
-    index: number;
-  }[];
+  choices: ChatChoice[];
+}
+
+interface ChatChunkChoice {
+  delta: {
+    role?: MessageRoles;
+    content?: string;
+  };
+  finish_reason: FinishReasons;
+  index: number;
+}
+
+interface ChatStreamChunk {
+  id: string;
+  object: "chat.completion.chunk";
+  created: number;
+  model: Models;
+  choices: ChatChunkChoice[];
 }
 
 interface GetChatArgs {
   model: Models;
   initialMessages: Message[];
   temperature: number;
+  stream?: boolean;
   stop?: string[];
 }
 
-export function getChat(args: GetChatArgs) {
-  const { model, initialMessages, temperature, stop } = args;
-  const chatCompletionUrl = "https://api.openai.com/v1/chat/completions";
+interface GetChatIteratorArgs extends Omit<GetChatArgs, "initialMessages"> {
+  messages: Message[];
+}
 
-  const openAIHeaders = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${openAIAPIKey}`,
-    "OpenAI-Organization": `${openAIAOrgID}`,
-  };
+interface ChatRetVal {
+  resBody?: ChatResBody;
+  streamChunk?: ChatStreamChunkData;
+  message: string;
+}
 
-  const messages: Message[] = [...initialMessages];
+function getChatIterator(args: GetChatIteratorArgs) {
+  const { messages, model, temperature, stream, stop } = args;
 
-  async function* chat(prompt: string): AsyncIterator<ChatResBody> {
+  return async function* chat(prompt: string): AsyncGenerator<ChatRetVal> {
     while (true) {
       messages.push({ role: "user", content: prompt });
 
-      const openAIBody: ChatReqBody = {
+      const chatReqBody: ChatReqBody = {
         model,
         messages,
         temperature,
-        stop,
+        ...(stream && { stream }),
+        ...(stop && { stop }),
       };
 
-      const rawResponse = await fetch(chatCompletionUrl, {
+      const rawChatResponse = await fetch(chatUrl, {
         method: "POST",
-        headers: openAIHeaders,
-        body: JSON.stringify(openAIBody),
+        headers: chatReqHeaders,
+        body: JSON.stringify(chatReqBody),
       });
 
-      const content: ChatResBody = await rawResponse.json();
-
-      console.log(content.choices);
+      const content: ChatResBody = await rawChatResponse.json();
 
       const assistantMessage = content.choices[0].message;
       messages.push(assistantMessage);
 
-      yield content;
+      yield { resBody: content, message: assistantMessage.content };
     }
-  }
-  return chat;
+  };
+}
+
+function parseRawChunk(dataValue: Uint8Array): ChatStreamChunk | undefined {
+  const decoder = new TextDecoder();
+  const chunkDataString = decoder.decode(
+    dataValue || new Uint8Array(),
+    {
+      stream: true,
+    },
+  );
+  const jsonString = chunkDataString.match(/^data:\s+(.*)/)![1];
+  const chunk = jsonString ? JSON.parse(jsonString) : undefined;
+  return chunk;
+}
+
+function getChatStreamIterator(args: GetChatIteratorArgs) {
+  const { messages, model, temperature, stream, stop } = args;
+
+  return async function* chat(prompt: string): AsyncGenerator<ChatRetVal> {
+    while (true) {
+      messages.push({ role: "user", content: prompt });
+
+      const chatReqBody: ChatReqBody = {
+        model,
+        messages,
+        temperature,
+        ...(stream && { stream }),
+        ...(stop && { stop }),
+      };
+
+      const rawChatResponse = await fetch(chatUrl, {
+        method: "POST",
+        headers: chatReqHeaders,
+        body: JSON.stringify(chatReqBody),
+      });
+
+      const reader = rawChatResponse.body!.getReader();
+
+      let partialData = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        const chunk = parseRawChunk(value);
+        if (chunk) {
+          partialData += chunk.choices[0].delta.content || "";
+        }
+      }
+
+      messages.push({ role: "assistant", content: partialData });
+
+      yield {
+        message: partialData,
+      };
+    }
+  };
+}
+
+export function getChat(args: GetChatArgs) {
+  const { model, initialMessages, temperature, stream, stop } = args;
+  const messages: Message[] = [...initialMessages];
+  const getChatIteratorArgs = { model, messages, temperature, stream, stop };
+  return stream
+    ? getChatStreamIterator(getChatIteratorArgs)
+    : getChatIterator(getChatIteratorArgs);
 }

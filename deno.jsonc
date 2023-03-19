@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-read --reload main.ts"
+    "dev": "deno run --watch --allow-net --allow-read --reload ./src/main.ts"
   },
   "imports": {
     "dotenv": "https://deno.land/x/dotenv@v3.2.2/mod.ts"
