@@ -51,7 +51,7 @@ async function main() {
   const flags = parse(Deno.args, {
     string: ["g", "t", "f"],
     boolean: ["h", "help"],
-    default: { g: 3, t: "0.5" },
+    default: { g: "3", t: "0.5" },
   });
 
   if (flags.h || flags.help) {
@@ -79,6 +79,10 @@ async function main() {
   let fullFileText = "";
   if (flags.f) fullFileText += await readFile(flags.f);
   let isUsingFileString = fullFileText.length > 0;
+
+  console.log(
+    `Chatting with ${model} (T:${temperature}) Type 'exit' or 'quit' to exit.`,
+  );
 
   while (true) {
     try {
