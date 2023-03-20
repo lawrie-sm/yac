@@ -6,8 +6,6 @@ export let isSpinnerRunning = false;
 
 export function startSpinner() {
   isSpinnerRunning = true;
-  console.log();
-
   let frame = 0;
   spinnerInterval = setInterval(() => {
     Deno.stdout.writeSync(textEncoder.encode("\x1b[1G" + spinnerFrames[frame]));

@@ -17,7 +17,7 @@ type Models = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
 
 type FinishReasons = "stop" | "length" | "content_filter" | "null";
 
-export type MessageRoles = "system" | "user" | "assistant";
+type MessageRoles = "system" | "user" | "assistant";
 
 interface Message {
   role: MessageRoles;
@@ -42,28 +42,6 @@ interface ChatReqBody {
   user?: string; // The user ID to use for this chat completion
 }
 
-interface ChatChoice {
-  message: {
-    role: MessageRoles;
-    content: string;
-  };
-  finish_reason: FinishReasons;
-  index: number;
-}
-
-interface ChatResBody {
-  id: string;
-  object: "chat.completion";
-  created: number;
-  model: Models;
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-  choices: ChatChoice[];
-}
-
 interface StreamChunkChoice {
   delta: {
     role?: MessageRoles;
@@ -81,38 +59,24 @@ export interface StreamChunk {
   choices: StreamChunkChoice[];
 }
 
-interface GetChatIteratorArgs extends Omit<initChatArgs, "initialMessages"> {
+interface InitStreamingChat {
+  model: Models;
+  initialMessages: Message[];
+  temperature: number;
+  stop?: string[];
+  onChunk: (chunk: StreamChunk, role: MessageRoles) => void;
+}
+
+interface GetStreamingChatIterator
+  extends Omit<InitStreamingChat, "initialMessages"> {
+  onChunk: (chunk: StreamChunk, role: MessageRoles) => void;
   messages: Message[];
 }
 
-function getChatIterator(args: GetChatIteratorArgs) {
-  const { messages, model, temperature, stop } = args;
-
-  return async function* chat(prompt: string, role: MessageRoles = "user") {
-    while (true) {
-      messages.push({ role, content: prompt });
-
-      const chatReqBody: ChatReqBody = {
-        model,
-        messages,
-        temperature,
-        ...(stop && { stop }),
-      };
-
-      const rawChatResponse = await fetch(chatUrl, {
-        method: "POST",
-        headers: chatReqHeaders,
-        body: JSON.stringify(chatReqBody),
-      });
-
-      const content: ChatResBody = await rawChatResponse.json();
-
-      const assistantMessage = content.choices[0].message;
-      messages.push(assistantMessage);
-
-      yield content;
-    }
-  };
+interface DoStreamingChat {
+  prompt: string;
+  role?: MessageRoles;
+  onChunk?: (chunk: StreamChunk) => void;
 }
 
 function parseStreamDataEvents(dataValue: Uint8Array) {
@@ -132,20 +96,10 @@ function parseStreamDataEvents(dataValue: Uint8Array) {
   return streamChunks;
 }
 
-interface GetStreamingChatIteratorArgs extends GetChatIteratorArgs {
-  onChunk: (chunk: StreamChunk, role: MessageRoles) => void;
-}
-
-interface StreamedChatArgs {
-  prompt: string;
-  role?: MessageRoles;
-  onChunk?: (chunk: StreamChunk) => void;
-}
-
-function getStreamingChatIterator(args: GetStreamingChatIteratorArgs) {
+function getStreamingChatIterator(args: GetStreamingChatIterator) {
   const { messages, model, temperature, stop, onChunk } = args;
 
-  return async function* streamedChat(args: StreamedChatArgs) {
+  return async function* doStreamingChat(args: DoStreamingChat) {
     const { prompt, role = "user" } = args;
     while (true) {
       messages.push({ role, content: prompt });
@@ -195,25 +149,7 @@ function getStreamingChatIterator(args: GetStreamingChatIteratorArgs) {
   };
 }
 
-interface initChatArgs {
-  model: Models;
-  initialMessages: Message[];
-  temperature: number;
-  stop?: string[];
-}
-
-export function initChat(args: initChatArgs) {
-  const { model, initialMessages, temperature, stop } = args;
-  const messages: Message[] = [...initialMessages];
-  const getChatIteratorArgs = { model, messages, temperature, stop };
-  return getChatIterator(getChatIteratorArgs);
-}
-
-interface initStreamingChatArgs extends initChatArgs {
-  onChunk: (chunk: StreamChunk, role: MessageRoles) => void;
-}
-
-export function initStreamingChat(args: initStreamingChatArgs) {
+export function initStreamingChat(args: InitStreamingChat) {
   const { model, initialMessages, temperature, stop, onChunk } = args;
   const messages: Message[] = [...initialMessages];
   const getChatIteratorArgs = { model, messages, temperature, stop, onChunk };
