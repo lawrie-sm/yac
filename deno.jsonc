@@ -1,9 +1,9 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env --reload ./src/main.ts",
-    "compile-linux-x86_64": "deno compile --allow-net --allow-env --output ./bin/yac --target x86_64-unknown-linux-gnu ./src/main.ts",
-    "compile-macos-x86_64": "deno compile --allow-net --allow-env --output ./bin/yac --target x86_64-apple-darwin ./src/main.ts",
-    "compile-windows-x86_64": "deno compile --allow-net --allow-env --output ./bin/yac.exe --target x86_64-pc-windows-msvc ./src/main.ts"
+    "dev": "deno run --watch --allow-net --allow-read --allow-env --reload ./src/main.ts",
+    "compile-linux-x86_64": "deno compile --allow-net --allow-read --allow-env --output ./bin/yac --target x86_64-unknown-linux-gnu ./src/main.ts",
+    "compile-macos-x86_64": "deno compile --allow-net --allow-read --allow-env --output ./bin/yac --target x86_64-apple-darwin ./src/main.ts",
+    "compile-windows-x86_64": "deno compile --allow-net --allow-read --allow-env --output ./bin/yac.exe --target x86_64-pc-windows-msvc ./src/main.ts"
   },
   "imports": {
     "flags": "https://deno.land/std@0.180.0/flags/mod.ts",
