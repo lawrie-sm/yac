@@ -62,7 +62,7 @@ async function main() {
 
       if (isUsingFileString) {
         isUsingFileString = false;
-        input = fullFileText + input;
+        input = fullFileText + " " + input;
       }
 
       if (!input || input === "") {
