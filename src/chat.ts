@@ -13,16 +13,16 @@ const chatReqHeaders = {
   "OpenAI-Organization": `${openAIAOrgID}`,
 };
 
-type Models = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
+export type Models = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
+
+export interface Message {
+  role: MessageRoles;
+  content: string;
+}
 
 type FinishReasons = "stop" | "length" | "content_filter" | "null";
 
 type MessageRoles = "system" | "user" | "assistant";
-
-interface Message {
-  role: MessageRoles;
-  content: string;
-}
 
 interface ChatReqBody {
   model: Models;
@@ -88,9 +88,13 @@ function parseStreamDataEvents(dataValue: Uint8Array) {
     if (eventString.match(/\[DONE\]/g)) {
       break;
     }
-    const jsonString = eventString.match(/^data:\s+(.*)/)![1];
-    const parsedChunk = JSON.parse(jsonString) as StreamChunk;
-    streamChunks.push(parsedChunk);
+    const jsonString = eventString.match(/^data:\s+(.*)/);
+    if (!jsonString || !jsonString[1]) {
+      continue;
+    } else {
+      const parsedChunk = JSON.parse(jsonString[1]) as StreamChunk;
+      streamChunks.push(parsedChunk);
+    }
   }
 
   return streamChunks;

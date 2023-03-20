@@ -1,15 +1,16 @@
 import { parse } from "flags";
-import { initStreamingChat, StreamChunk } from "./chat.ts";
+import { initStreamingChat, Message, Models, StreamChunk } from "./chat.ts";
 import { isSpinnerRunning, startSpinner, stopSpinner } from "./spinner.ts";
 
-const textEncoder = new TextEncoder();
-
-function onChunk(chunk: StreamChunk) {
-  isSpinnerRunning && stopSpinner();
-  const chunkMessage = chunk?.choices[0].delta.content || "";
-  if (chunk && chunkMessage && chunkMessage.length) {
-    Deno.stdout.write(textEncoder.encode(chunkMessage));
-  }
+function getChunkHandler() {
+  const textEncoder = new TextEncoder();
+  return function (chunk: StreamChunk) {
+    isSpinnerRunning && stopSpinner();
+    const chunkMessage = chunk?.choices[0].delta.content || "";
+    if (chunk && chunkMessage && chunkMessage.length) {
+      Deno.stdout.write(textEncoder.encode(chunkMessage));
+    }
+  };
 }
 
 async function main() {
@@ -17,22 +18,22 @@ async function main() {
     string: ["g", "t"],
     default: { g: 3 },
   });
-  const model = flags.g === "3" ? "gpt-3.5-turbo" : "gpt-4";
+
+  const model: Models = flags.g === "4" ? "gpt-4" : "gpt-3.5-turbo";
   const temperature = parseFloat(flags.t ?? "0.5");
+  const initialMessages: Message[] = [
+    {
+      role: "system",
+      content: "You are a helpful chat assistant.",
+    },
+  ];
 
   const streamingChat = initStreamingChat({
     model,
-    temperature: temperature,
-    initialMessages: [
-      {
-        role: "system",
-        content: "You are a helpful chat assistant.",
-      },
-    ],
-    onChunk,
+    temperature,
+    initialMessages,
+    onChunk: getChunkHandler(),
   });
-
-  console.log(`Running ${model} with temperature ${temperature}`);
 
   while (true) {
     try {
