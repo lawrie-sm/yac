@@ -1,9 +1,9 @@
 {
   "tasks": {
     "dev": "deno run --watch --allow-net --allow-read --reload ./src/main.ts",
-    "compile-linux-x86_64": "deno compile --allow-net --allow-read --output ./bin/gpt-cli --target x86_64-unknown-linux-gnu ./src/main.ts",
-    "compile-macos-x86_64": "deno compile --allow-net --allow-read --output ./bin/gpt-cli --target x86_64-apple-darwin ./src/main.ts",
-    "compile-windows-x86_64": "deno compile --allow-net --allow-read --output ./bin/gpt-cli.exe --target x86_64-pc-windows-msvc ./src/main.ts"
+    "compile-linux-x86_64": "deno compile --allow-net --allow-read --output ./bin/yac --target x86_64-unknown-linux-gnu ./src/main.ts",
+    "compile-macos-x86_64": "deno compile --allow-net --allow-read --output ./bin/yac --target x86_64-apple-darwin ./src/main.ts",
+    "compile-windows-x86_64": "deno compile --allow-net --allow-read --output ./bin/yac.exe --target x86_64-pc-windows-msvc ./src/main.ts"
   },
   "imports": {
     "streams": "https://deno.land/std/streams/conversion.ts",
