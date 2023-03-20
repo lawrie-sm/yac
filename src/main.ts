@@ -2,6 +2,10 @@ import { parse } from "flags";
 import { initStreamingChat, Message, Models, StreamChunk } from "./chat.ts";
 import { isSpinnerRunning, startSpinner, stopSpinner } from "./spinner.ts";
 
+/* TODOs:
+ * Get piped input working, right now using stdin is blocking prompt - probably need to write a custom prompt
+*/
+
 function getChunkHandler() {
   const textEncoder = new TextEncoder();
   return function (chunk: StreamChunk) {
@@ -13,14 +17,24 @@ function getChunkHandler() {
   };
 }
 
+async function readFile(path: string) {
+  try {
+    const text = await Deno.readTextFile(path);
+    return text.trim();
+  } catch (e) {
+    console.error(e);
+    Deno.exit(1);
+  }
+}
+
 async function main() {
   const flags = parse(Deno.args, {
-    string: ["g", "t"],
-    default: { g: 3 },
+    string: ["g", "t", "f"],
+    default: { g: 3, t: "0.5" },
   });
 
   const model: Models = flags.g === "4" ? "gpt-4" : "gpt-3.5-turbo";
-  const temperature = parseFloat(flags.t ?? "0.5");
+  const temperature = parseFloat(flags.t);
   const initialMessages: Message[] = [
     {
       role: "system",
@@ -35,9 +49,21 @@ async function main() {
     onChunk: getChunkHandler(),
   });
 
+  let fullFileText = "";
+  if (flags.f) fullFileText += await readFile(flags.f);
+  let isUsingFileString = fullFileText.length > 0;
+
   while (true) {
     try {
-      const input = prompt("Prompt:");
+      const promptText = isUsingFileString
+        ? `Prompt [+${flags.f} (${fullFileText.length} chars)]:`
+        : "Prompt:";
+      let input = prompt(promptText);
+
+      if (isUsingFileString) {
+        isUsingFileString = false;
+        input = fullFileText + input;
+      }
 
       if (!input || input === "") {
         continue;
@@ -48,6 +74,7 @@ async function main() {
       }
 
       startSpinner();
+
       await streamingChat({ prompt: input }).next();
 
       console.log();
