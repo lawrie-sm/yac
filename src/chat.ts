@@ -106,7 +106,7 @@ function getStreamingChatIterator(args: GetStreamingChatIterator) {
   return async function* doStreamingChat(args: DoStreamingChat) {
     const { prompt, role = "user" } = args;
     while (true) {
-      console.log({ prompt, role });
+      messages.push({ role, content: prompt });
 
       const chatReqBody: ChatReqBody = {
         model,
