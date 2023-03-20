@@ -2,6 +2,8 @@
 
 Yet Another CLI app for ChatGPT.
 
+Uses the streaming output, and supports text files as prompt inputs. Chats maintain persistent context, similar to the web app.
+
 ### Installation
 
 Your OpenAI API key needs to be set in your environment as OPENAI_API_KEY.
