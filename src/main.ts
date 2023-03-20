@@ -1,3 +1,4 @@
+import { parse } from "flags";
 import { initStreamingChat, StreamChunk } from "./chat.ts";
 import { isSpinnerRunning, startSpinner, stopSpinner } from "./spinner.ts";
 
@@ -12,9 +13,16 @@ function onChunk(chunk: StreamChunk) {
 }
 
 async function main() {
+  const flags = parse(Deno.args, {
+    string: ["g", "t"],
+    default: { g: 3 },
+  });
+  const model = flags.g === "3" ? "gpt-3.5-turbo" : "gpt-4";
+  const temperature = parseFloat(flags.t ?? "0.5");
+
   const streamingChat = initStreamingChat({
-    model: "gpt-3.5-turbo",
-    temperature: 0.5,
+    model,
+    temperature: temperature,
     initialMessages: [
       {
         role: "system",
@@ -24,6 +32,8 @@ async function main() {
     onChunk,
   });
 
+  console.log(`Running ${model} with temperature ${temperature}`);
+
   while (true) {
     try {
       const input = prompt("Prompt:");
@@ -32,7 +42,7 @@ async function main() {
         continue;
       }
 
-      if (input === "exit" || input === "quit" || input === "q") {
+      if (input === "exit" || input === "quit" || input === "\\q") {
         break;
       }
 

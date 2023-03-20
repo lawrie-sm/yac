@@ -6,6 +6,7 @@
     "compile-windows-x86_64": "deno compile --allow-net --allow-read --output ./bin/gpt-cli.exe --target x86_64-pc-windows-msvc ./src/main.ts"
   },
   "imports": {
+    "flags": "https://deno.land/std@0.180.0/flags/mod.ts",
     "dotenv": "https://deno.land/x/dotenv@v3.2.2/mod.ts"
   }
 }
