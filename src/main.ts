@@ -1,8 +1,6 @@
 import { initStreamingChat, StreamChunk } from "./chat.ts";
 import { isSpinnerRunning, startSpinner, stopSpinner } from "./spinner.ts";
 
-const systemPrompt = "You are a helpful chat assistant.";
-
 const textEncoder = new TextEncoder();
 
 function onChunk(chunk: StreamChunk) {
@@ -20,7 +18,7 @@ async function main() {
     initialMessages: [
       {
         role: "system",
-        content: systemPrompt,
+        content: "You are a helpful chat assistant.",
       },
     ],
     onChunk,
