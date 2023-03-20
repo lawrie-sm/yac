@@ -2,10 +2,6 @@ import { parse } from "flags";
 import { initStreamingChat, Message, Models, StreamChunk } from "./chat.ts";
 import { isSpinnerRunning, startSpinner, stopSpinner } from "./spinner.ts";
 
-/* TODOs:
- * Get piped input working, right now using stdin is blocking prompt - probably need to write a custom prompt
-*/
-
 function getChunkHandler() {
   const textEncoder = new TextEncoder();
   return function (chunk: StreamChunk) {
