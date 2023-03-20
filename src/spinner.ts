@@ -6,6 +6,7 @@ export let isSpinnerRunning = false;
 
 export function startSpinner() {
   isSpinnerRunning = true;
+  console.log();
 
   let frame = 0;
   spinnerInterval = setInterval(() => {

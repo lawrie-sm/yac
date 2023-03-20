@@ -17,7 +17,7 @@ type Models = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
 
 type FinishReasons = "stop" | "length" | "content_filter" | "null";
 
-type MessageRoles = "system" | "user" | "assistant";
+export type MessageRoles = "system" | "user" | "assistant";
 
 interface Message {
   role: MessageRoles;
@@ -81,23 +81,16 @@ export interface StreamChunk {
   choices: StreamChunkChoice[];
 }
 
-interface GetChatArgs {
-  model: Models;
-  initialMessages: Message[];
-  temperature: number;
-  stop?: string[];
-}
-
-interface GetChatIteratorArgs extends Omit<GetChatArgs, "initialMessages"> {
+interface GetChatIteratorArgs extends Omit<initChatArgs, "initialMessages"> {
   messages: Message[];
 }
 
 function getChatIterator(args: GetChatIteratorArgs) {
   const { messages, model, temperature, stop } = args;
 
-  return async function* chat(prompt: string) {
+  return async function* chat(prompt: string, role: MessageRoles = "user") {
     while (true) {
-      messages.push({ role: "user", content: prompt });
+      messages.push({ role, content: prompt });
 
       const chatReqBody: ChatReqBody = {
         model,
@@ -139,15 +132,23 @@ function parseStreamDataEvents(dataValue: Uint8Array) {
   return streamChunks;
 }
 
-function getStreamingChatIterator(args: GetChatIteratorArgs) {
-  const { messages, model, temperature, stop } = args;
+interface GetStreamingChatIteratorArgs extends GetChatIteratorArgs {
+  onChunk: (chunk: StreamChunk, role: MessageRoles) => void;
+}
 
-  return async function* streamedChat(
-    prompt: string,
-    onChunk: (chunk: StreamChunk) => void,
-  ) {
+interface StreamedChatArgs {
+  prompt: string;
+  role?: MessageRoles;
+  onChunk?: (chunk: StreamChunk) => void;
+}
+
+function getStreamingChatIterator(args: GetStreamingChatIteratorArgs) {
+  const { messages, model, temperature, stop, onChunk } = args;
+
+  return async function* streamedChat(args: StreamedChatArgs) {
+    const { prompt, role = "user" } = args;
     while (true) {
-      messages.push({ role: "user", content: prompt });
+      messages.push({ role, content: prompt });
 
       const chatReqBody: ChatReqBody = {
         model,
@@ -179,7 +180,7 @@ function getStreamingChatIterator(args: GetChatIteratorArgs) {
           if (chunkMessage && chunkMessage.length) {
             partialData += chunkMessage;
           }
-          onChunk(chunk);
+          onChunk && onChunk(chunk, role);
         }
       }
 
@@ -188,23 +189,34 @@ function getStreamingChatIterator(args: GetChatIteratorArgs) {
         content: partialData,
       };
 
+      console.log({ messages });
       messages.push(gatheredMessage);
-
       yield { message: gatheredMessage };
     }
   };
 }
 
-export function initChat(args: GetChatArgs) {
+interface initChatArgs {
+  model: Models;
+  initialMessages: Message[];
+  temperature: number;
+  stop?: string[];
+}
+
+export function initChat(args: initChatArgs) {
   const { model, initialMessages, temperature, stop } = args;
   const messages: Message[] = [...initialMessages];
   const getChatIteratorArgs = { model, messages, temperature, stop };
   return getChatIterator(getChatIteratorArgs);
 }
 
-export function initStreamingChat(args: GetChatArgs) {
-  const { model, initialMessages, temperature, stop } = args;
+interface initStreamingChatArgs extends initChatArgs {
+  onChunk: (chunk: StreamChunk, role: MessageRoles) => void;
+}
+
+export function initStreamingChat(args: initStreamingChatArgs) {
+  const { model, initialMessages, temperature, stop, onChunk } = args;
   const messages: Message[] = [...initialMessages];
-  const getChatIteratorArgs = { model, messages, temperature, stop };
+  const getChatIteratorArgs = { model, messages, temperature, stop, onChunk };
   return getStreamingChatIterator(getChatIteratorArgs);
 }
