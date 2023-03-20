@@ -189,21 +189,11 @@ function getStreamingChatIterator(args: GetStreamingChatIteratorArgs) {
         content: partialData,
       };
 
-      console.log({ messages });
       messages.push(gatheredMessage);
       yield { message: gatheredMessage };
     }
   };
 }
-
-// TODO: This probably works better as a class
-/*
- * Init with config, model, temperature, stop etc.
- * Can call method with prompt and role - streaming can have an onChunk handler still
- * Messages as a property etc.
- * We can probably halt printing when "PAUSE" occers - even if it tries to guess.
- * We can remove the guess from message history too
- */
 
 interface initChatArgs {
   model: Models;
