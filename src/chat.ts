@@ -1,17 +1,6 @@
-import { config } from "dotenv";
-
 const textDecoder = new TextDecoder();
 
 const chatUrl = "https://api.openai.com/v1/chat/completions";
-
-const openAIAPIKey = config().OPENAI_API_KEY || Deno.env.get("OPENAI_API_KEY");
-const openAIAOrgID = config().OPENAI_ORG_ID || Deno.env.get("OPENAI_ORG_ID");
-
-const chatReqHeaders = {
-  "Content-Type": "application/json",
-  "Authorization": `Bearer ${openAIAPIKey}`,
-  "OpenAI-Organization": `${openAIAOrgID}`,
-};
 
 export type Models = "gpt-4" | "gpt-4-32k" | "gpt-3.5-turbo";
 
@@ -60,6 +49,7 @@ export interface StreamChunk {
 }
 
 interface InitStreamingChat {
+  openAIAPIKey: string;
   model: Models;
   initialMessages: Message[];
   temperature: number;
@@ -101,7 +91,12 @@ function parseStreamDataEvents(dataValue: Uint8Array) {
 }
 
 function getStreamingChatIterator(args: GetStreamingChatIterator) {
-  const { messages, model, temperature, stop, onChunk } = args;
+  const { openAIAPIKey, messages, model, temperature, stop, onChunk } = args;
+
+  const chatReqHeaders = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${openAIAPIKey}`,
+  };
 
   return async function* doStreamingChat(args: DoStreamingChat) {
     const { prompt, role = "user" } = args;
@@ -154,8 +149,19 @@ function getStreamingChatIterator(args: GetStreamingChatIterator) {
 }
 
 export function initStreamingChat(args: InitStreamingChat) {
-  const { model, initialMessages, temperature, stop, onChunk } = args;
+  const { openAIAPIKey, model, initialMessages, temperature, stop, onChunk } =
+    args;
+
   const messages: Message[] = [...initialMessages];
-  const getChatIteratorArgs = { model, messages, temperature, stop, onChunk };
+
+  const getChatIteratorArgs = {
+    openAIAPIKey,
+    model,
+    messages,
+    temperature,
+    stop,
+    onChunk,
+  };
+
   return getStreamingChatIterator(getChatIteratorArgs);
 }

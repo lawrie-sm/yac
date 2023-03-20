@@ -41,6 +41,13 @@ OPTIONS:
 }
 
 async function main() {
+  const openAIAPIKey = Deno.env.get("OPENAI_API_KEY");
+
+  if (!openAIAPIKey || openAIAPIKey === "") {
+    console.log("OPENAI_API_KEY environment variable not set.");
+    Deno.exit(1);
+  }
+
   const flags = parse(Deno.args, {
     string: ["g", "t", "f"],
     boolean: ["h", "help"],
@@ -62,6 +69,7 @@ async function main() {
   ];
 
   const streamingChat = initStreamingChat({
+    openAIAPIKey,
     model,
     temperature,
     initialMessages,
