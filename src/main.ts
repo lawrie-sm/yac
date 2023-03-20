@@ -23,11 +23,34 @@ async function readFile(path: string) {
   }
 }
 
+function printHelp() {
+  console.log(`yac - Yet Another CLI app for ChatGPT
+https://github.com/lawrie-sm/yac
+
+USAGE:
+    yac [OPTIONS]
+
+OPTIONS:
+    -g
+        GPT version. Valid options are 3 (3.5-turbo, default) and 4 (gpt-4-8k).
+    -t
+        Temperature. Defaults to 0.5.
+    -f
+        Text file path. File contents will be appended to the initial prompt.
+`);
+}
+
 async function main() {
   const flags = parse(Deno.args, {
     string: ["g", "t", "f"],
+    boolean: ["h", "help"],
     default: { g: 3, t: "0.5" },
   });
+
+  if (flags.h || flags.help) {
+    printHelp();
+    Deno.exit(0);
+  }
 
   const model: Models = flags.g === "4" ? "gpt-4" : "gpt-3.5-turbo";
   const temperature = parseFloat(flags.t);
