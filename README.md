@@ -13,7 +13,7 @@ Requires [Deno](https://github.com/denoland/deno).
 Run directly:
 
 ```
-deno run --allow-read --allow-net src/main.ts
+deno run --allow-env --allow-net src/main.ts
 ```
 
 Compile:
