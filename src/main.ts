@@ -1,4 +1,4 @@
-import { parse } from "flags";
+import { parse } from "https://deno.land/std@0.180.0/flags/mod.ts";
 import { initStreamingChat, Message, Models, StreamChunk } from "./chat.ts";
 import { isSpinnerRunning, startSpinner, stopSpinner } from "./spinner.ts";
 
@@ -81,7 +81,7 @@ async function main() {
   let isUsingFileString = fullFileText.length > 0;
 
   console.log(
-    `Chatting with ${model} (T:${temperature}) Type 'exit' or 'quit' to exit.`,
+    `Chatting with ${model} (T:${temperature}) Type 'exit' or 'quit' to exit.`
   );
 
   while (true) {
